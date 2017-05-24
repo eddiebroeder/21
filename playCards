@@ -1,0 +1,99 @@
+#!/usr/bin/perl
+
+use Data::Dumper;
+
+my @SUITS = ("Hearts", "Diamonds", "Spades", "Clubs");
+my @RANKS = ("Ace", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Jack", "Queen", "King");
+my @VALUES = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 10, 10);
+my @deck = ();
+my @playerHand;
+my @dealerHand;
+my $playing = 1;
+my %dealerUpCard;
+
+&buildDeck();
+&shuffle();
+
+&dealCards(\@playerHand, 2);
+&dealCards(\@dealerHand, 2);
+%dealerUpCard = %{$dealerHand[0]};
+
+exit 0;
+
+while ($playing) {
+    my $playerDecision = &playerDecide(\@playerHand, %dealerUpCard);
+    # TODO: put hit, stand, double-down, split logic here
+    my $dealerDecision = &dealerDecision(\@dealerHand);
+    
+}
+
+sub buildDeck() {
+    foreach my $suit (@SUITS) {
+        my $index = 0;
+        foreach my $rank (@RANKS) {
+            my %card;
+            $card{suit} = $suit;
+            $card{rank} = $rank;
+            $card{value} = $VALUES[$index++];
+            push(@deck, \%card);
+        }
+    }
+    print(Dumper(@deck)) if $ARGV[0] eq "-d";
+}
+
+sub shuffle() {
+    my @tmpArray;
+    foreach my $card (@deck) {
+        my $randomIndex = int(rand(52));
+        while ($tmpArray[$randomIndex]) {
+            $randomIndex = int(rand(52));
+        }
+        $tmpArray[$randomIndex] = $card;
+    }
+    @deck = @tmpArray;
+}
+
+sub dealCards() {
+    my $hand = shift;
+    my $count = shift;
+    foreach (1..$count) {
+        push($hand, pop(@deck));
+    }
+}
+
+sub getHandTotal() {
+    my $hand = shift;
+    my $total = 0;
+    my $aceCount = 0;
+    foreach my $card (@{$hand}) {
+        $total += $card->{value};
+        $aceCount++ if $card->{rank} eq "Ace";
+    }
+    return ($total, $aceCount);
+}
+
+sub dealerDecide() {
+    my $hand = shift;
+    my ($total, $aceCount) = &getHandTotal($hand);
+    if ($aceCount == 0) {
+        return "HIT" if $total <= 16;
+        return "STAND" if $total > 16;
+    }
+    #XXX: does this below code work for 1-4 aces? I think it might
+    else {
+        # dealer stands on soft 17 or higher
+        return "STAND" if ($total > 6 && $total < 12);
+        return "HIT" if ($total > 11);
+        return "HIT" if ($total < 7);
+    }
+}
+
+sub playerDecide() {
+    my $hand = shift;
+    my $dealerUpCard = shift;
+}
+
+sub printDebug() {
+    my $msg = shift;
+    print "DBG: $msg\n" if $ARGV[0] eq "-d";
+}
