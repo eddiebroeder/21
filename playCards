@@ -1,33 +1,110 @@
 #!/usr/bin/perl
+use strict;
+use warnings;
 
 use Data::Dumper;
+use Term::ANSIColor;
+use Getopt::Std;
+
+use vars qw($opt_d $opt_t $opt_n);
+
+&getopts("dtn:");
 
 my @SUITS = ("Hearts", "Diamonds", "Spades", "Clubs");
 my @RANKS = ("Ace", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Jack", "Queen", "King");
 my @VALUES = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 10, 10);
 my @deck = ();
-my @playerHand;
-my @dealerHand;
-my $playing = 1;
-my %dealerUpCard;
+my $playing;
+my $dealerPlaying;
+my %results;
 
-&buildDeck();
-&shuffle();
 
-&dealCards(\@playerHand, 2);
-&dealCards(\@dealerHand, 2);
-%dealerUpCard = %{$dealerHand[0]};
+my $numberOfRounds = ($opt_n) ? $opt_n : 100;
+print "\nRunning for $numberOfRounds rounds\n";
+my $playCount = 0;
 
-exit 0;
-
-while ($playing) {
-    my $playerDecision = &playerDecide(\@playerHand, %dealerUpCard);
-    # TODO: put hit, stand, double-down, split logic here
-    my $dealerDecision = &dealerDecision(\@dealerHand);
+while ($playCount < $numberOfRounds) {
+    my @playerHand = ();
+    my @dealerHand = ();
+    my %dealerUpCard;
+    $results{total}++;
+    &buildDeck();
+    &shuffle();
+    $playing = 1;
+    $dealerPlaying = 1;
     
+    &dealCards(\@dealerHand, 2);
+    %dealerUpCard = %{$dealerHand[0]};
+
+    &dealCards(\@playerHand, 2);
+    &printTest("\nPlayer hand:\n");
+
+    &listHand(\@playerHand) if $opt_t;
+    my $playerDecision;
+    while ($playing) {
+        $playerDecision = &playerDecide(\@playerHand, %dealerUpCard);
+        &printTest("Player decision: $playerDecision\n\n");
+        if ($playerDecision eq "BUST") {
+            &printTest("---->Player busts!\n");
+            $playing = 0;
+        }
+        elsif ($playerDecision eq "HIT") {
+            &dealCards(\@playerHand, 1);
+            &printTest("Player hand:\n");
+            &listHand(\@playerHand) if $opt_t;
+        }
+        elsif ($playerDecision eq "STAND") {
+            $playing = 0;
+        }
+    }
+    my ($playerTotal, $playerAceCount) = &getHandTotal(\@playerHand);
+    
+    &printTest("\nDealer hand:\n");
+    &listHand(\@dealerHand) if $opt_t;
+    
+    my $dealerDecision;
+    while ($dealerPlaying) {
+        $dealerDecision = &dealerDecide(\@dealerHand);
+        &printTest("Dealer decision: $dealerDecision\n\n");
+        if ($dealerDecision eq "BUST") {
+            &printTest("---->Dealer busts!\n");
+            $dealerPlaying = 0;
+        }
+        elsif ($dealerDecision eq "HIT") {
+            &dealCards(\@dealerHand, 1);
+            &printTest("Dealer hand:\n");
+            &listHand(\@dealerHand) if $opt_t;
+        }
+        elsif ($dealerDecision eq "STAND") {
+            $dealerPlaying = 0;
+        }
+    }
+    my ($dealerTotal, $dealerAceCount) = &getHandTotal(\@dealerHand);
+    
+    if ($playerDecision eq "BUST" || ($playerTotal < $dealerTotal && $dealerDecision ne "BUST")) {
+        print colored("\nPLAYER LOSES\n\n", "red bold") if $opt_t;
+        $results{dealer}++;
+    }
+    elsif ($dealerDecision eq "BUST" || ($playerTotal > $dealerTotal && $playerDecision ne "BUST")) {
+        print colored("\nPLAYER WINS\n\n", "white bold") if $opt_t;
+        $results{player}++;
+    }
+    elsif ($playerTotal == $dealerTotal) {
+        print colored("\nPUSH\n\n", "yellow bold") if $opt_t;
+        $results{push}++;
+    }
+    else {
+        print colored("\nSHOULDN'T HIT THIS CONDITION, SOMETHING IS WRONG\n\n", "blue bold");
+    }
+    $playCount++;
 }
 
+&printReport();
+
+#---<Subroutines>--------------------------------------------------------------
+
 sub buildDeck() {
+    @deck = ();
     foreach my $suit (@SUITS) {
         my $index = 0;
         foreach my $rank (@RANKS) {
@@ -38,15 +115,15 @@ sub buildDeck() {
             push(@deck, \%card);
         }
     }
-    print(Dumper(@deck)) if $ARGV[0] eq "-d";
 }
 
 sub shuffle() {
     my @tmpArray;
+    my $deckSize = scalar @deck;
     foreach my $card (@deck) {
-        my $randomIndex = int(rand(52));
+        my $randomIndex = int(rand($deckSize));
         while ($tmpArray[$randomIndex]) {
-            $randomIndex = int(rand(52));
+            $randomIndex = int(rand($deckSize));
         }
         $tmpArray[$randomIndex] = $card;
     }
@@ -57,7 +134,9 @@ sub dealCards() {
     my $hand = shift;
     my $count = shift;
     foreach (1..$count) {
-        push($hand, pop(@deck));
+        my $card = pop(@deck);
+        push($hand, $card);
+        &printDebug("Dealt $card->{rank}");
     }
 }
 
@@ -69,31 +148,103 @@ sub getHandTotal() {
         $total += $card->{value};
         $aceCount++ if $card->{rank} eq "Ace";
     }
+    if ($aceCount > 0 && ($total + 10) <= 21) {
+        &aceChange($hand);
+        $total += 10;
+    }
+    elsif (&hasEleven($hand) && ($total > 21)) {
+        &aceChangeBack($hand);
+        $total -= 10;
+    }
     return ($total, $aceCount);
+}
+
+sub listHand() {
+    my $hand = shift;
+    my ($total, $aceCount) = &getHandTotal($hand);
+    foreach my $card (@{$hand}) {
+        print "$card->{rank}\n";
+    }
+    print "Total: $total\n\n";
+}
+
+sub aceChange() {
+    my $hand = shift;
+    foreach my $card (@{$hand}) {
+        if ($card->{rank} eq "Ace") {
+            $card->{value} = 11;
+            last;
+        }
+    }
+}
+
+sub aceChangeBack() {
+    my $hand = shift;
+    foreach my $card (@{$hand}) {
+        if ($card->{rank} eq "Ace") {
+            $card->{value} = 1;
+        }
+    }
+}
+
+sub hasEleven() {
+    my $hand = shift;
+    foreach my $card (@{$hand}) {
+        if ($card->{rank} eq "Ace") {
+            return 1 if $card->{value} == 11;
+        }
+    }
+    return 0;
 }
 
 sub dealerDecide() {
     my $hand = shift;
     my ($total, $aceCount) = &getHandTotal($hand);
-    if ($aceCount == 0) {
-        return "HIT" if $total <= 16;
-        return "STAND" if $total > 16;
+    if ($total > 21 && &hasEleven($hand)) {
+        &aceChangeBack($hand);
     }
-    #XXX: does this below code work for 1-4 aces? I think it might
-    else {
-        # dealer stands on soft 17 or higher
-        return "STAND" if ($total > 6 && $total < 12);
-        return "HIT" if ($total > 11);
-        return "HIT" if ($total < 7);
+    return "BUST" if $total > 21;
+    if ($aceCount == 0 || &hasEleven($hand)) {
+        return "HIT" if $total < 17;
+        return "STAND";
+    }
+    else { # dealer stands on soft 17
+        &aceChange($hand) if $total < 12;
+        ($total, $aceCount) = &getHandTotal($hand);
+        return "HIT" if $total < 17;
+        return "STAND";
     }
 }
 
 sub playerDecide() {
     my $hand = shift;
     my $dealerUpCard = shift;
+    return &dealerDecide($hand); #XXX: trying out dealer strategy
+}
+
+sub printReport() {
+    my $pushes = ($results{push}) ? $results{push} : 0;
+    my $playerWins = ($results{player}) ? $results{player} : 0;
+    my $dealerWins = ($results{dealer}) ? $results{dealer} : 0;
+    my $total = $results{total};
+
+    my $playerWinPercentage = ($playerWins / ($total - $pushes)) * 100;
+    my $dealerWinPercentage = ($dealerWins / ($total - $pushes)) * 100;
+    print "\nReport:\n";
+    print "Player wins: $playerWins\n";
+    print "Dealer wins: $dealerWins\n";
+    print "Pushes: $pushes\n";
+    print "Total rounds: $total\n\n";
+    print "Player win percentage: $playerWinPercentage%\n";
+    print "Dealer win percentage: $dealerWinPercentage%\n\n";
+}
+
+sub printTest() {
+    my $msg = shift;
+    print "$msg" if $opt_t;
 }
 
 sub printDebug() {
     my $msg = shift;
-    print "DBG: $msg\n" if $ARGV[0] eq "-d";
+    print "DBG: $msg\n" if $opt_d;
 }
