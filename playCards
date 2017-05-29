@@ -1,4 +1,14 @@
 #!/usr/bin/perl
+
+################################################################################
+# playCards - Blackjack Simulator
+#
+# TODO in-order:
+#       -double down and splitting
+#       -include different player strategies
+#
+################################################################################
+
 use strict;
 use warnings;
 
