@@ -219,8 +219,6 @@ sub dealerDecide() {
         return "STAND";
     }
     else { # dealer stands on soft 17
-        &aceChange($hand) if $total < 12;
-        ($total, $aceCount) = &getHandTotal($hand);
         return "HIT" if $total < 17;
         return "STAND";
     }
