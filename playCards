@@ -5,7 +5,10 @@
 #
 # TODO in-order:
 #       -double down and splitting
-#       -include different player strategies
+#       -mode for basic strategy
+#       -bets
+#       -include other player strategies
+#       -insurance and surrender
 #
 ################################################################################
 
