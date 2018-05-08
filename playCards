@@ -243,6 +243,8 @@ sub playerBasicStrategy() {
         return "STAND" if ($total >= 17);
         return "STAND" if ($total >= 13 && $dealerUpCard->{value} <= 6);
         return "STAND" if ($total == 12 && $dealerUpCard->{value} >= 4 && $dealerUpCard->{value} <= 6);
+        return "HIT"   if ($total >= 12 && $dealerUpCard->{value} >= 7);
+        return "HIT"   if ($total == 12 && $dealerUpCard->{value} <= 3);
     }
     else { # soft hand
 
