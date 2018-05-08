@@ -9,6 +9,7 @@
 #       -bets
 #       -include other player strategies
 #       -insurance and surrender
+#       -run in parallel
 #
 ################################################################################
 
@@ -19,9 +20,10 @@ use Data::Dumper;
 use Term::ANSIColor;
 use Getopt::Std;
 
-use vars qw($opt_d $opt_t $opt_n);
+use vars qw($opt_d $opt_v $opt_n $opt_p $opt_h);
 
-&getopts("dtn:");
+&getopts("dvn:ph");
+exit &printUsage if ($opt_h || !$opt_p);
 
 my @SUITS = ("Hearts", "Diamonds", "Spades", "Clubs");
 my @RANKS = ("Ace", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Jack", "Queen", "King");
@@ -52,7 +54,7 @@ while ($playCount < $numberOfRounds) {
     &dealCards(\@playerHand, 2);
     &printTest("\nPlayer hand:\n");
 
-    &listHand(\@playerHand) if $opt_t;
+    &listHand(\@playerHand) if $opt_v;
     my $playerDecision;
     while ($playing) {
         $playerDecision = &playerDecide(\@playerHand, %dealerUpCard);
@@ -64,7 +66,7 @@ while ($playCount < $numberOfRounds) {
         elsif ($playerDecision eq "HIT") {
             &dealCards(\@playerHand, 1);
             &printTest("Player hand:\n");
-            &listHand(\@playerHand) if $opt_t;
+            &listHand(\@playerHand) if $opt_v;
         }
         elsif ($playerDecision eq "STAND") {
             $playing = 0;
@@ -73,7 +75,7 @@ while ($playCount < $numberOfRounds) {
     my ($playerTotal, $playerAceCount) = &getHandTotal(\@playerHand);
     
     &printTest("\nDealer hand:\n");
-    &listHand(\@dealerHand) if $opt_t;
+    &listHand(\@dealerHand) if $opt_v;
     
     my $dealerDecision;
     while ($dealerPlaying) {
@@ -86,7 +88,7 @@ while ($playCount < $numberOfRounds) {
         elsif ($dealerDecision eq "HIT") {
             &dealCards(\@dealerHand, 1);
             &printTest("Dealer hand:\n");
-            &listHand(\@dealerHand) if $opt_t;
+            &listHand(\@dealerHand) if $opt_v;
         }
         elsif ($dealerDecision eq "STAND") {
             $dealerPlaying = 0;
@@ -95,15 +97,15 @@ while ($playCount < $numberOfRounds) {
     my ($dealerTotal, $dealerAceCount) = &getHandTotal(\@dealerHand);
     
     if ($playerDecision eq "BUST" || ($playerTotal < $dealerTotal && $dealerDecision ne "BUST")) {
-        print colored("\nPLAYER LOSES\n\n", "red bold") if $opt_t;
+        print colored("\nPLAYER LOSES\n\n", "red bold") if $opt_v;
         $results{dealer}++;
     }
     elsif ($dealerDecision eq "BUST" || ($playerTotal > $dealerTotal && $playerDecision ne "BUST")) {
-        print colored("\nPLAYER WINS\n\n", "white bold") if $opt_t;
+        print colored("\nPLAYER WINS\n\n", "white bold") if $opt_v;
         $results{player}++;
     }
     elsif ($playerTotal == $dealerTotal) {
-        print colored("\nPUSH\n\n", "yellow bold") if $opt_t;
+        print colored("\nPUSH\n\n", "yellow bold") if $opt_v;
         $results{push}++;
     }
     else {
@@ -148,7 +150,7 @@ sub dealCards() {
     my $count = shift;
     foreach (1..$count) {
         my $card = pop(@deck);
-        push($hand, $card);
+        push(@{$hand}, $card);
         &printDebug("Dealt $card->{rank}");
     }
 }
@@ -230,7 +232,21 @@ sub dealerDecide() {
 sub playerDecide() {
     my $hand = shift;
     my $dealerUpCard = shift;
+    #return &playerBasicStrategy($hand, $dealerUpCard);
     return &dealerDecide($hand); #XXX: trying out dealer strategy
+}
+
+sub playerBasicStrategy() {
+    my ($hand, $dealerUpCard) = @_;
+    my ($total, $aceCount) = &getHandTotal($hand);
+    if ($aceCount == 0) { # hard hand
+        return "STAND" if ($total >= 17);
+        return "STAND" if ($total >= 13 && $dealerUpCard->{value} <= 6);
+        return "STAND" if ($total == 12 && $dealerUpCard->{value} >= 4 && $dealerUpCard->{value} <= 6);
+    }
+    else { # soft hand
+
+    }
 }
 
 sub printReport() {
@@ -250,9 +266,21 @@ sub printReport() {
     printf("Dealer win percentage: %.3f%%\n\n", $dealerWinPercentage);
 }
 
+sub printUsage() {
+    print <<EOM
+Usage: playCards [OPTION]...
+Simulate a large number of blackjack hands between a player and a dealer.
+    -p      begin simulation
+    -n      number of rounds (default: 100)
+    -v      print verbose output
+    -h      show this help and exit
+        
+EOM
+}
+
 sub printTest() {
     my $msg = shift;
-    print "$msg" if $opt_t;
+    print "$msg" if $opt_v;
 }
 
 sub printDebug() {
